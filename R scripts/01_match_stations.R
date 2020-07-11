@@ -78,7 +78,7 @@ batch1 <- stations %>%
   st_as_sf()
 
 # Find unmatched stations and geocode them through Google
-register_google('AIzaSyCxRr5X230ATq_h8rQAUBzEnNgmkRZi9a4')
+register_google('AIzaSyCCNpp_aFL8aN7l3d7qM9-ealdco4M8L-A')
 
 unmatched <- stations %>%
   mutate(value_c = str_remove(str_trim(value), "\\(.+\\)")) %>% 
