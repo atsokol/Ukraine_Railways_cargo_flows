@@ -1,0 +1,99 @@
+---
+title: "UZ flows by type of cargo"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(flowmapblue)
+library(dplyr)
+library(sf)
+library(lubridate)
+library(stringr)
+library(mapboxer)
+library(purrr)
+library(plotly)
+library(hrbrthemes)
+
+load("./UZ flows 2017-2020.RData")
+
+```
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+types <- data_clean$cargo %>% 
+  unique() %>% 
+  prepend("All")
+
+selectInput("cargo_type", label = h3("Cargo type"), 
+    choices = types)
+```
+
+
+Column
+-----------------------------------------------------------------------
+
+### Map of cargo flows {data-height=650}
+
+```{r}
+locations <- stations_sf %>% 
+  mutate(id = row_number()) %>% 
+  mutate(lat = st_coordinates(.)[,2],
+         lon = st_coordinates(.)[,1]) %>% 
+  select(id, name, lat, lon) %>% 
+  st_drop_geometry()
+
+flows <- reactive({
+  data_clean %>% 
+  filter(year(date) == '2019') %>%
+  {if (input$cargo_type == "All") filter(.,TRUE) 
+    else filter(.,cargo == input$cargo_type)} %>% 
+  mutate(org = match(origin, locations$name)) %>% 
+  mutate(dst = match(destination, locations$name)) %>% 
+  filter(!is.na(org), !is.na(dst)) %>% 
+  group_by(org, dst) %>% 
+  summarise(vahoniv = sum(vahoniv)) %>% 
+  select(origin=org, dest=dst, count=vahoniv)
+})
+  
+renderFlowmapblue({
+  flowmapblue(locations = locations, flows = flows(), Sys.getenv("mapbox_token"), clustering=TRUE, darkMode=FALSE, animation=FALSE)
+})
+
+```
+
+### Cargo volumes {data-height=350, .no-padding}
+
+```{r}
+g2 <- reactive({
+  data_clean %>% 
+    {if (input$cargo_type == "All") filter(.,TRUE) 
+    else filter(.,cargo == input$cargo_type)} %>% 
+    mutate(year = factor(year(date)),
+           date = update(date, year = 1)) %>% 
+    filter(year %in% c("2019","2020")) %>% 
+    group_by(year, date) %>% 
+    summarise(ton = sum(ton)) %>%
+    ggplot(aes(x=date, y=ton, color=year)) +
+    geom_line() +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+    theme_ipsum_rc(grid='none') +
+    theme(legend.position = 'bottom',
+          legend.title = element_blank()) +
+    scale_y_continuous(labels = scales::unit_format(unit = "M", scale = 1e-6)) +
+    scale_color_manual(values=list("grey80", "steelblue")) +
+    labs(x="", y="")
+})
+
+renderPlotly({
+  ggplotly(g2()) %>% layout(margin = list(l=100, t=50, r=100, b=50))
+})
+```
+
